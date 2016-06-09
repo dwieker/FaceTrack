@@ -14,11 +14,11 @@ ROI_padding = .2
 ROI_speed = .10
 consec_facelss_frames = 0
 max_faceless_frames = 5
-jerk_threshold = 0
+jerk_threshold = .05
 face_y_cut = .3; face_x_cut = .2
 eye_n = 0; eye_scaling = 1.3 
 face_n = 1; face_scaling = 1.1 
-img_size = 1. #Shrink by this factor 
+img_size = 1.0 #Shrink by this factor 
 
 
 # Initialize Web Cam Thread
@@ -40,12 +40,9 @@ prev_face = None
 while(True):
     # Capture frame
     ret, frame_original = vs.read()
-
-    if frame is None:
+    if frame_original is None:
     	break
 
-  
-    #frame = imrotate(frame, -90)
     frame = frame_original.copy()
     frame = imresize(frame, img_size)
 
@@ -55,6 +52,9 @@ while(True):
     # Cut out region of interest to reduce computational time. 
     (x1, y1), (x2, y2) = ROI
     gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+
+    # Draw ROI
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color=(255,0,0), thickness=2)
 
 
     # Detect faces in the gray image
@@ -161,10 +161,12 @@ while(True):
             #     # Display the resulting frame
             #     cv2.imshow('plot', plot) 
 
-            y = int(y/img_size); x = int(x/img_size); h = int(h/img_size); w = int(w/img_size)       
+            # I want the face pixels on the original, non-resized image
+            y_org = int(y/img_size); x_org = int(x/img_size); h_org = int(h/img_size); w_org = int(w/img_size)       
+            
             # Grab middle of face and append mean pixels
-            face = frame_original[y + int(face_y_cut*h): y + h - int(face_y_cut*h), 
-                         x + int(face_x_cut*w): x + w - int(face_x_cut*w)]
+            face = frame_original[y_org + int(face_y_cut*h_org): y_org + h_org - int(face_y_cut*h_org), 
+                         x_org + int(face_x_cut*w): x_org + w_org - int(face_x_cut*w_org)]
             pixels.append([face[:, :,  0].mean(), 
                            face[:, :,  1].mean(), 
                            face[:, :,  2].mean()
@@ -173,15 +175,14 @@ while(True):
             cv2.imshow("face", imresize(face, (300,300)))
 
             # Draw Face rectangle!
-            cv2.rectangle(frame_original, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
             midx = (x + w + x)/2; midy = (y+h+y)/2
             cv2.circle(frame, (midx,midy), 5, color=(0,0,0)) 
 
             # Draw rects around eyes 
             for eye in eyes:
-                (xe, ye, we, he) = eye
-                ye = int(ye/img_size); xe = int(xe/img_size); he = int(he/img_size); w = int(we/img_size)         
-                cv2.rectangle(frame_original, (x+xe, y+ye), (xe+x+we, ye+y+he), (0, 255, 0), 1)
+                (xe, ye, we, he) = eye      
+                cv2.rectangle(frame, (x+xe, y+ye), (xe+x+we, ye+y+he), (0, 255, 0), 1)
 
                          
             face_found = True
@@ -205,10 +206,11 @@ while(True):
             x,y,w,h = prev_face 
                          
 
-            y = int(y/img_size); x = int(x/img_size); h = int(h/img_size); w = int(w/img_size)         
+            y_org = int(y/img_size); x_org = int(x/img_size); h_org = int(h/img_size); w_org = int(w/img_size)       
+            
             # Grab middle of face and append mean pixels
-            face = frame_original[y + int(face_y_cut*h): y + h - int(face_y_cut*h), 
-                         x + int(face_x_cut*w): x + w - int(face_x_cut*w)]
+            face = frame_original[y_org + int(face_y_cut*h_org): y_org + h_org - int(face_y_cut*h_org), 
+                         x_org + int(face_x_cut*w): x_org + w_org - int(face_x_cut*w_org)]
             pixels.append([face[:, :,  0].mean(), 
                            face[:, :,  1].mean(), 
                            face[:, :,  2].mean()
@@ -216,17 +218,17 @@ while(True):
 
             #cv2.imshow("face", imresize(face, (300,300)))
 
-            cv2.rectangle(frame_original, (x, y), (x+w, y+h), (0, 255, 255), 2)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255), 2)
             midx = (x + w + x)/2; midy = (y+h+y)/2
-            cv2.circle(frame_original, (midx,midy), 5, color=(0,0,0))
+            cv2.circle(frame, (midx,midy), 5, color=(0,0,0))
     
     
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(frame_original, "%.2f"%(1 / (time.time() - t)),(0,30), font, 1, (0,0,0),2)
+    cv2.putText(frame, "%.2f"%(1 / (time.time() - t)),(0,30), font, 1, (0,0,0),2)
     
     # Display the resulting frame
-    cv2.imshow('main', frame_original)  
+    cv2.imshow('main', frame)  
 
     t = time.time()
     if cv2.waitKey(1) & 0xFF == ord('q'):
