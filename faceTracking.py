@@ -14,16 +14,16 @@ ROI_padding = .2
 ROI_speed = .10
 consec_facelss_frames = 0
 max_faceless_frames = 5
-jerk_threshold = .05
-face_y_cut = .3; face_x_cut = .2
-eye_n = 0; eye_scaling = 1.3 
-face_n = 1; face_scaling = 1.1 
+jerk_threshold = .03
+face_y_cut = .3; face_x_cut = .35
+eye_n = 1; eye_scaling = 1.3 
+face_n = 1; face_scaling = 1.1
 img_size = 1.0 #Shrink by this factor 
 
 
 # Initialize Web Cam Thread
-#vs = cv2.VideoCapture(0)
-vs = cv2.VideoCapture("videos/" + vid_name)
+vs = cv2.VideoCapture(0)
+#vs = cv2.VideoCapture("videos/me/" + vid_name)
 
 
 # Face pixels to be saved for processing
@@ -53,9 +53,9 @@ while(True):
     (x1, y1), (x2, y2) = ROI
     gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
 
+
     # Draw ROI
     cv2.rectangle(frame, (x1, y1), (x2, y2), color=(255,0,0), thickness=2)
-
 
     # Detect faces in the gray image
     faces = faceCascade.detectMultiScale(
@@ -65,6 +65,8 @@ while(True):
         minSize=(30, 30),
         flags = cv2.cv.CV_HAAR_SCALE_IMAGE
     )
+
+    print faces
 
 
     # Initially assume no face was found. Now, search through canidate faces
@@ -166,7 +168,7 @@ while(True):
             
             # Grab middle of face and append mean pixels
             face = frame_original[y_org + int(face_y_cut*h_org): y_org + h_org - int(face_y_cut*h_org), 
-                         x_org + int(face_x_cut*w): x_org + w_org - int(face_x_cut*w_org)]
+                         x_org + int(face_x_cut*w_org): x_org + w_org - int(face_x_cut*w_org)]
             pixels.append([face[:, :,  0].mean(), 
                            face[:, :,  1].mean(), 
                            face[:, :,  2].mean()
@@ -205,7 +207,6 @@ while(True):
         if prev_face:
             x,y,w,h = prev_face 
                          
-
             y_org = int(y/img_size); x_org = int(x/img_size); h_org = int(h/img_size); w_org = int(w/img_size)       
             
             # Grab middle of face and append mean pixels
