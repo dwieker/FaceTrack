@@ -17,7 +17,8 @@ class FaceTracker():
                     eye_jerk_threshold = .05,
                     eye_n = 1, eye_scaling = 1.2,
                     face_n = 1, face_scaling = 1.1,
-                    img_size = 1.0 ):
+                    img_size = 1.0,
+                    eye_span = .85):
     
 
         self.ROI_padding = ROI_padding 
@@ -29,12 +30,17 @@ class FaceTracker():
         self.eye_n = eye_n
         self.eye_scaling = eye_scaling 
         self.face_n = face_n; self.face_scaling = face_scaling
-        self.img_size = img_size 
+        self.img_size = img_size
+        self.eye_span = eye_span
 
         self.ROI = None
         self.face = None
         self.frame = None
+        self.scaled_gray = None
         self.eyes = []
+
+        # (Height of eyes as a percent of face frame height, and thickness)
+        self.eye_band = None 
 
     def update_frame(self, frame):
         frame = frame.copy()
@@ -72,33 +78,28 @@ class FaceTracker():
         return (xdiff > threshold) or (ydiff > threshold)
 
 
-    def update_eyes(self, new_eyes):
-        if self.face:
-            (x,y,w,h) = self.face
-            updated_eyes = []
+    def get_eye_band(self):
+        # Returns a rectangle x,y,w,h that encompasses the eyes
+        # Must locate face first!
+        if self.face != None:
+            x,y,w,h = self.face
+            if self.eye_band == None:
+                #  We must accurately locate the eyes! #Attempt to set it
+                eyes = FaceTracker.eyeCascade.detectMultiScale(
+                    self.scaled_gray[y:y+int(.8*h), x:x+w],
+                    scaleFactor=1.1,
+                    minNeighbors=2,
+                    minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
+                )
 
-            new_eyes = map(lambda eye:( int((eye[0] + x)/self.img_size),
-                                               int((eye[1] + y)/self.img_size),
-                                               int(eye[2]/self.img_size),
-                                               int(eye[3]/self.img_size)
-                                    ), new_eyes )
-
-  
-            for old_eye, new_eye in zip(self.eyes, new_eyes):
-                print "checking eye movement"
-                print "eye threshold:", self.eye_jerk_threshold*self.face[2]
-                print "tyoe:", type(self.eye_jerk_threshold), type(self.face[2]) 
-                if self.has_moved(old_eye, new_eye, self.eye_jerk_threshold*self.face[2]):
-                    updated_eyes.append(new_eye)
-                    print "Moved! Appending new eye"
-                else:
-                    updated_eyes.append(old_eye)
-                    print "Did not move... using old eye"
-
+                if len(eyes) > 0:
+                    xi,yi,hi,wi = eyes[0]
+                    self.eye_band = yi / float(h), hi / float(h)
             
-            longer = max(self.eyes, new_eyes, key=lambda x: len(x))
-            self.eyes = updated_eyes + longer[min(len(self.eyes), len(new_eyes)):]
-           
+            if self.eye_band:
+                hi, thickness = self.eye_band
+                return (int((x+w*(1-self.eye_span)) / self.img_size), int((y+h*hi)/self.img_size), 
+                       int(w*(2*self.eye_span-1)/self.img_size), int((thickness*h)/self.img_size))
 
 
     def locate_face(self):
@@ -106,6 +107,7 @@ class FaceTracker():
         # Cut out region of interest to reduce computational time. 
         (x1, y1), (x2, y2) = self.ROI
         gray = cv2.cvtColor(self.frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+        self.scaled_gray = gray
 
         # Detect faces in the gray image
         faces = FaceTracker.faceCascade.detectMultiScale(
@@ -132,8 +134,7 @@ class FaceTracker():
         
             # Were Eyes found?
             if len(eyes) > 0: 
-                self.update_eyes(eyes[:2])
-
+      
                 x += x1; y += y1;
 
                 # Reset faceless frame count
@@ -171,7 +172,10 @@ class FaceTracker():
             y = int(y/self.img_size); x = int(x/self.img_size); 
             h = int(h/self.img_size); w = int(w/self.img_size) 
 
-            return x,y,w,h
+            return (x,y,w,h), face_found
+
+
+        return None, False
 
 
 
