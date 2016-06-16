@@ -7,7 +7,7 @@ from faceTracker import FaceTracker
 
 t = time.time()
 
-vid_name = "me4.mov"
+vid_name = "people.mp4"
 
 # Initialize Video Thread
 #vs = cv2.VideoCapture(0)
@@ -16,7 +16,7 @@ vs = cv2.VideoCapture("videos/" + vid_name)
 # Face pixels to be saved for processing
 pixels = []
 
-faceTracker = FaceTracker(eye_n=2)
+faceTracker = FaceTracker(eye_n=3, eye_scaling=1.1, eye_jerk_threshold=0.1, img_size=1.0)
 while(True):
     
     # Capture frame
@@ -47,7 +47,8 @@ while(True):
 
 
         # Draw eyes!
-        for (xi, yi, wi, hi) in faceTracker.locate_eyes():
+        for eye in faceTracker.eyes:
+            xi, yi, wi, hi = eye
             cv2.rectangle(frame, (xi,yi), (xi+wi, yi+hi) , color=(0,255,0)) 
 
 

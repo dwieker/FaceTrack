@@ -14,6 +14,7 @@ class FaceTracker():
                     consec_facelss_frames = 0,
                     max_faceless_frames = 5,
                     jerk_threshold = .03,
+                    eye_jerk_threshold = .05,
                     eye_n = 1, eye_scaling = 1.2,
                     face_n = 1, face_scaling = 1.1,
                     img_size = 1.0 ):
@@ -24,6 +25,7 @@ class FaceTracker():
         self.consec_facelss_frames = consec_facelss_frames
         self.max_faceless_frames = max_faceless_frames 
         self.jerk_threshold = jerk_threshold
+        self.eye_jerk_threshold = eye_jerk_threshold
         self.eye_n = eye_n
         self.eye_scaling = eye_scaling 
         self.face_n = face_n; self.face_scaling = face_scaling
@@ -32,7 +34,7 @@ class FaceTracker():
         self.ROI = None
         self.face = None
         self.frame = None
-        self.eyes = None
+        self.eyes = []
 
     def update_frame(self, frame):
         frame = frame.copy()
@@ -66,17 +68,37 @@ class FaceTracker():
         (x,y,w,h) = new
         xdiff = abs((x_old + w_old + x_old)/2. -  (x + w + x)/2.)
         ydiff = abs((y_old + h_old + y_old)/2. -  (y + h + y)/2.)
-        return (xdiff < threshold*w_old) and (ydiff < threshold*h_old)
+        print xdiff, ydiff
+        return (xdiff > threshold) or (ydiff > threshold)
 
 
-    def locate_eyes(self):
-        (x,y,w,h) = self.face
-        if self.eyes is not None:
-            return map(lambda eye:( int((eye[0] + x)/self.img_size),
+    def update_eyes(self, new_eyes):
+        if self.face:
+            (x,y,w,h) = self.face
+            updated_eyes = []
+
+            new_eyes = map(lambda eye:( int((eye[0] + x)/self.img_size),
                                                int((eye[1] + y)/self.img_size),
                                                int(eye[2]/self.img_size),
                                                int(eye[3]/self.img_size)
-                                    ), self.eyes )
+                                    ), new_eyes )
+
+  
+            for old_eye, new_eye in zip(self.eyes, new_eyes):
+                print "checking eye movement"
+                print "eye threshold:", self.eye_jerk_threshold*self.face[2]
+                print "tyoe:", type(self.eye_jerk_threshold), type(self.face[2]) 
+                if self.has_moved(old_eye, new_eye, self.eye_jerk_threshold*self.face[2]):
+                    updated_eyes.append(new_eye)
+                    print "Moved! Appending new eye"
+                else:
+                    updated_eyes.append(old_eye)
+                    print "Did not move... using old eye"
+
+            
+            longer = max(self.eyes, new_eyes, key=lambda x: len(x))
+            self.eyes = updated_eyes + longer[min(len(self.eyes), len(new_eyes)):]
+           
 
 
     def locate_face(self):
@@ -110,7 +132,7 @@ class FaceTracker():
         
             # Were Eyes found?
             if len(eyes) > 0: 
-                self.eyes = eyes
+                self.update_eyes(eyes[:2])
 
                 x += x1; y += y1;
 
@@ -119,7 +141,7 @@ class FaceTracker():
             
                 # If there was a face last frame, just use that position again
                 # UNLESS significant movement occured
-                if (self.face and has_moved(self.face, (x,y,w,h), self.jerk_threshold)) or self.face == None:
+                if (self.face and self.has_moved(self.face, (x,y,w,h), self.jerk_threshold*w)) or self.face == None:
                     self.ROI = self.calculate_ROI_around_face(x,y,w,h)
                     self.face=(x,y,w,h)
                 
@@ -128,7 +150,6 @@ class FaceTracker():
                 break
         
         
-    
         if not face_found:  
             # If no face was found, expand the ROI - the subject may have moved too fast
         
