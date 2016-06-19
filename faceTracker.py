@@ -14,11 +14,9 @@ class FaceTracker():
                     consec_facelss_frames = 0,
                     max_faceless_frames = 5,
                     jerk_threshold = .03,
-                    eye_jerk_threshold = .05,
                     eye_n = 1, eye_scaling = 1.2,
                     face_n = 1, face_scaling = 1.1,
-                    img_size = 1.0,
-                    eye_span = .85):
+                    img_size = 1.0):
     
 
         self.ROI_padding = ROI_padding 
@@ -26,25 +24,18 @@ class FaceTracker():
         self.consec_facelss_frames = consec_facelss_frames
         self.max_faceless_frames = max_faceless_frames 
         self.jerk_threshold = jerk_threshold
-        self.eye_jerk_threshold = eye_jerk_threshold
         self.eye_n = eye_n
         self.eye_scaling = eye_scaling 
         self.face_n = face_n; self.face_scaling = face_scaling
         self.img_size = img_size
-        self.eye_span = eye_span
 
         self.ROI = None
         self.face = None
         self.frame = None
-        self.scaled_gray = None
-        self.eyes = []
-
-        # (Height of eyes as a percent of face frame height, and thickness)
-        self.eye_band = None 
+  
 
     def update_frame(self, frame):
         frame = frame.copy()
-        frame = imresize(frame, self.img_size)
         
         if self.ROI is None:
             print "Setting ROI to full frame"
@@ -74,40 +65,39 @@ class FaceTracker():
         (x,y,w,h) = new
         xdiff = abs((x_old + w_old + x_old)/2. -  (x + w + x)/2.)
         ydiff = abs((y_old + h_old + y_old)/2. -  (y + h + y)/2.)
-        print xdiff, ydiff
         return (xdiff > threshold) or (ydiff > threshold)
 
 
-    def get_eye_band(self):
-        # Returns a rectangle x,y,w,h that encompasses the eyes
-        # Must locate face first!
-        if self.face != None:
-            x,y,w,h = self.face
-            if self.eye_band == None:
-                #  We must accurately locate the eyes! #Attempt to set it
-                eyes = FaceTracker.eyeCascade.detectMultiScale(
-                    self.scaled_gray[y:y+int(.8*h), x:x+w],
-                    scaleFactor=1.1,
-                    minNeighbors=2,
-                    minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
-                )
+    # def get_eye_band(self):
+    #     # Returns a rectangle x,y,w,h that encompasses the eyes
+    #     # Must locate face first!
+    #     if self.face != None:
+    #         x,y,w,h = self.face
+    #         if self.eye_band == None:
+    #             #  We must accurately locate the eyes! #Attempt to set it
+    #             eyes = FaceTracker.eyeCascade.detectMultiScale(
+    #                 self.scaled_gray[y:y+int(.8*h), x:x+w],
+    #                 scaleFactor=1.1,
+    #                 minNeighbors=2,
+    #                 minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
+    #             )
 
-                if len(eyes) > 0:
-                    xi,yi,hi,wi = eyes[0]
-                    self.eye_band = yi / float(h), hi / float(h)
+    #             if len(eyes) > 0:
+    #                 xi,yi,hi,wi = eyes[0]
+    #                 self.eye_band = yi / float(h), hi / float(h)
             
-            if self.eye_band:
-                hi, thickness = self.eye_band
-                return (int((x+w*(1-self.eye_span)) / self.img_size), int((y+h*hi)/self.img_size), 
-                       int(w*(2*self.eye_span-1)/self.img_size), int((thickness*h)/self.img_size))
+    #         if self.eye_band:
+    #             hi, thickness = self.eye_band
+    #             return (int((x+w*(1-self.eye_span)) / self.img_size), int((y+h*hi)/self.img_size), 
+    #                    int(w*(2*self.eye_span-1)/self.img_size), int((thickness*h)/self.img_size))
 
 
     def locate_face(self):
+        frame = imresize(self.frame, self.img_size)
     
         # Cut out region of interest to reduce computational time. 
         (x1, y1), (x2, y2) = self.ROI
-        gray = cv2.cvtColor(self.frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-        self.scaled_gray = gray
+        gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
 
         # Detect faces in the gray image
         faces = FaceTracker.faceCascade.detectMultiScale(
