@@ -1,15 +1,16 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+from sklearn.decomposition import FastICA
+from scipy.ndimage.interpolation import shift
 
 class FaceStats:
-	mean_top_face_pixels = []
-	mean_bottom_face_pixels = []
-	mean_face_pixels = []
-	face = None
-
-	def __init__(self, FPS):
+	
+	def __init__(self, FPS, window=15):
 		self.FPS = FPS
+		self.mean_face_pixels = np.ones((window*FPS, 3)) * np.nan
+		self.face = None
+
 
 	def normalizeRGB(self, x):
 		r, g, b = x[:,0], x[:,1], x[:,2]
@@ -18,23 +19,16 @@ class FaceStats:
 		b = (b - b.mean()) / b.std()
 		return np.array([r, g, b])
 
-	def face_fourier(self, mean_face_pixels):
-		signals = []
-		x = np.array(mean_face_pixels)
-		r,g,b = self.normalizeRGB(x)
-		for cs, color in zip(['r','g','b'], [r,g,b]):
+	def fourier(self, pixels):
+		n = len(pixels)
+		freqs = np.fft.fftfreq(n, 1./self.FPS)[:n/2]
+		mask = (freqs > .8) & (freqs < 2.5)
 
-		    n = len(color)
-		    color *= np.hanning(n)
+		pixels *= np.hanning(n)
 
-		    # Fourier transform
-		    I = abs(np.fft.fft(color)[:n/2])
-		    freqs = np.fft.fftfreq(n, 1./self.FPS)[:n/2]
-		    
-		    mask = (freqs > .8) & (freqs < 2.5)
-		    signals.append((freqs[mask], I[mask]))
-		
-		return signals
+		I = abs(np.fft.fft(pixels)[:n/2])
+	
+		return freqs[mask], I[mask]
 
 	def rgb_mean(self, pixels):
 		return (
@@ -51,7 +45,16 @@ class FaceStats:
 
 	def update_face(self, face):
 		self.face = face
-		self.mean_face_pixels.append( self.rgb_mean(face) )
+
+		if not np.isnan(self.mean_face_pixels[-1, 0]):
+			self.mean_face_pixels[:-1] = self.mean_face_pixels[1:]
+			index = -1
+		else:
+			index = np.where(np.isnan(self.mean_face_pixels[:,0]))[0][0]
+
+
+		self.mean_face_pixels[index] = self.rgb_mean(face)
+
 
 
 	def draw_signal(self, signal, plot, color=(0,0,0)):
@@ -69,35 +72,77 @@ class FaceStats:
 				        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
 
-	def draw_face_fourier(self, width=400, window=15):
+	def draw_face_fourier(self, width=400):
 		plot = np.ones((255,width,3))
-		colors = [(255,0,0), (0,255,0), (0,0,255)]
+	
+		r,g,b = self.normalizeRGB(self.mean_face_pixels)
 
-		face_pixels = self.mean_face_pixels[-window*self.FPS:]
-		for i, (freqs, signal) in enumerate(self.face_fourier(face_pixels)):
-			signal *= 215. / max(signal)
-			
-			if i!=1:
-				continue
+		freqs, I = self.fourier(g)
 
-			self.draw_signal(signal, plot, colors[i])
+		I *= 215. / max(I)
+		
+		self.draw_signal(I, plot, (0,255,0))
 
+		# Annotate Bottom
+		f = np.linspace(freqs[0], freqs[-1], 6)*60
+		self.draw_x_axis(f, plot)
 
-			# Annotate Bottom
-			f = np.linspace(.8, 2.5, 6)*60
-			self.draw_x_axis(f, plot)
-
-			#	Mark Peak
-			x,y = (int(signal.argmax() * width/len(signal)), 
-				   235-int(signal.max()))
-			cv2.circle(plot,(x,y),5, (0,0,255), -1)
-			peak_x = freqs[signal.argmax()] * 60
-			cv2.putText(plot, "%d"%peak_x + " BPM", (x,y-5), 
-				        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
+		# Mark Peak
+		x,y = (int(I.argmax() * width/len(I)), 
+			   235-int(I.max()))
+		cv2.circle(plot,(x,y),5, (0,0,255), -1)
+		peak_x = freqs[I.argmax()] * 60
+		cv2.putText(plot, "%d"%peak_x + " BPM", (x,y-5), 
+			        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
 
 		cv2.imshow("Heart Rate", plot)
 
+
+	def draw_ICA(self, width=400, window=15):
+		ica = FastICA(n_components=3, max_iter=30, random_state=1)
+		r,g,b = self.normalizeRGB(self.mean_face_pixels)
+		comps = ica.fit_transform( np.array([r,g*1.5,b]).T )
+
+		plot = np.ones((255,width,3))
+		f_plot = plot.copy()
+		colors = [(255,0,0), (0,255,0), (0,0,255)]
+
+		f_transforms = []
+		best_signal = None
+		max_peak_diff = 0
+
+		for i, comp in enumerate([comps[:,0], comps[:,1], comps[:,2]]):
+
+			freqs, I = self.fourier(comp)
+			I *= 215. / max(I)
+
+			f_transforms.append(I)
+
+			peaks = np.where(np.r_[True, I[1:] > I[:-1]] & np.r_[I[:-1] > I[1:], True])[0]
+		   
+			peak_heights = I[peaks]
+			peak_heights.sort()
+
+			peak_diff =  (peak_heights[-1] - peak_heights[-2]) / peak_heights[-1]
+			if peak_diff > max_peak_diff:
+				max_peak_diff = peak_diff
+				best_signal = i
+
+
+	
+		# Mark Peak
+		f = f_transforms[best_signal]
+		x,y = (int(f.argmax() * width/len(f)), 
+			   235-int(f.max()))
+		cv2.circle(f_plot,(x,y),5, (0,0,255), -1)
+		peak_x = freqs[f.argmax()] * 60
+		cv2.putText(f_plot, "%d"%peak_x + " BPM", (x,y-5), 
+			        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
+
+		self.draw_signal(f, f_plot, (255,0,0))
+
+		cv2.imshow("ICA best frequency siganl", f_plot)
 
 
 

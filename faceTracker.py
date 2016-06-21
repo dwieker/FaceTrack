@@ -11,44 +11,43 @@ class FaceTracker():
     def __init__(   self,
                     ROI_padding = .2,
                     ROI_speed = .10,
-                    consec_facelss_frames = 0,
                     max_faceless_frames = 5,
                     jerk_threshold = .03,
                     eye_n = 1, eye_scaling = 1.2,
                     face_n = 1, face_scaling = 1.1,
+                    min_img_size = 80.,
                     img_size = 1.0):
     
 
         self.ROI_padding = ROI_padding 
         self.ROI_speed = ROI_speed 
-        self.consec_facelss_frames = consec_facelss_frames
         self.max_faceless_frames = max_faceless_frames 
         self.jerk_threshold = jerk_threshold
         self.eye_n = eye_n
         self.eye_scaling = eye_scaling 
         self.face_n = face_n; self.face_scaling = face_scaling
+        self.min_img_size = min_img_size
         self.img_size = img_size
 
         self.ROI = None
         self.face = None
         self.frame = None
+        self.consec_facelss_frames = 0
   
 
     def update_frame(self, frame):
-        frame = frame.copy()
-        
+        self.frame = frame
         if self.ROI is None:
             print "Setting ROI to full frame"
             self.ROI = ((0, 0), (frame.shape[1], frame.shape[0]))
 
-        self.frame = frame
-
+        
     def calculate_ROI_around_face(self, x,y,w,h):
         # Input parameters are a FACE. Output is an exanded ROI, accounting for frame boundaries
         x1_new, y1_new, x2_new, y2_new =(max(0, x - int(self.ROI_padding*w)),
                                         max(0, y - int(self.ROI_padding*h)),
-                                        min(self.frame.shape[1], x + int((1+self.ROI_padding)*(w/self.img_size))),
-                                        min(self.frame.shape[0], y + int((1+self.ROI_padding)*(h/self.img_size)))) 
+                                        min(self.frame.shape[1], x + int((1+self.ROI_padding)*w)),
+                                        min(self.frame.shape[0], y + int((1+self.ROI_padding)*h))) 
         return ((x1_new, y1_new), (x2_new, y2_new))
 
     def expand_ROI(self):
@@ -56,8 +55,8 @@ class FaceTracker():
         ROI_w, ROI_h = x2-x1, y2-y1
         self.ROI =((max(0, x1 - int(self.ROI_speed*ROI_w)), 
                     max(0, y1 - int(self.ROI_speed*ROI_h))),
-                   (min(self.frame.shape[1], x2  + int(self.ROI_speed*ROI_w)), 
-                    min(self.frame.shape[0], y2+int(self.ROI_speed*ROI_h)))) 
+                   (min(self.frame.shape[1], x2 + int(self.ROI_speed*ROI_w)), 
+                    min(self.frame.shape[0], y2 + int(self.ROI_speed*ROI_h)))) 
 
 
     def has_moved(self, old, new, threshold):
@@ -68,36 +67,13 @@ class FaceTracker():
         return (xdiff > threshold) or (ydiff > threshold)
 
 
-    # def get_eye_band(self):
-    #     # Returns a rectangle x,y,w,h that encompasses the eyes
-    #     # Must locate face first!
-    #     if self.face != None:
-    #         x,y,w,h = self.face
-    #         if self.eye_band == None:
-    #             #  We must accurately locate the eyes! #Attempt to set it
-    #             eyes = FaceTracker.eyeCascade.detectMultiScale(
-    #                 self.scaled_gray[y:y+int(.8*h), x:x+w],
-    #                 scaleFactor=1.1,
-    #                 minNeighbors=2,
-    #                 minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
-    #             )
-
-    #             if len(eyes) > 0:
-    #                 xi,yi,hi,wi = eyes[0]
-    #                 self.eye_band = yi / float(h), hi / float(h)
-            
-    #         if self.eye_band:
-    #             hi, thickness = self.eye_band
-    #             return (int((x+w*(1-self.eye_span)) / self.img_size), int((y+h*hi)/self.img_size), 
-    #                    int(w*(2*self.eye_span-1)/self.img_size), int((thickness*h)/self.img_size))
-
-
     def locate_face(self):
-        frame = imresize(self.frame, self.img_size)
-    
+
         # Cut out region of interest to reduce computational time. 
         (x1, y1), (x2, y2) = self.ROI
-        gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(self.frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+
+        gray = imresize(gray, self.img_size)
 
         # Detect faces in the gray image
         faces = FaceTracker.faceCascade.detectMultiScale(
@@ -121,12 +97,16 @@ class FaceTracker():
                 minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
             )
             
-        
             # Were Eyes found?
             if len(eyes) > 0: 
       
+                x = int(x / self.img_size); y = int(y / self.img_size)
+                w = int(w / self.img_size); h = int(h / self.img_size)
                 x += x1; y += y1;
 
+                # If face size is large, we can shrink the image to speed up comp
+                self.img_size = self.min_img_size / h
+               
                 # Reset faceless frame count
                 self.consec_facelss_frames = 0
             
@@ -142,30 +122,19 @@ class FaceTracker():
         
         
         if not face_found:  
-            # If no face was found, expand the ROI - the subject may have moved too fast
-        
-            print "Face not found..."
-            
+            # If no face was found, expand the ROI - the subject may have moved too fast    
             self.expand_ROI()
 
             self.consec_facelss_frames += 1 
 
             if self.consec_facelss_frames > self.max_faceless_frames:
                 self.face = None
-                print "Face set to None"
-
+                self.img_size = 1.0
 
         if self.face:
-
-            # Transform the face coordinates to the original images reference frame.
-            x,y,w,h = self.face
-            y = int(y/self.img_size); x = int(x/self.img_size); 
-            h = int(h/self.img_size); w = int(w/self.img_size) 
-
-            return (x,y,w,h), face_found
-
-
-        return None, False
+            return self.face, face_found
+        else:
+            return None, False
 
 
 
