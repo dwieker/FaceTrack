@@ -9,7 +9,7 @@ import sys
 t = time.time()
 face_slice = .20, .80, .0, .8
 
-vid_name = "mom.mp4"
+vid_name = "dad.mov"
 
 
 # Initialize Video Thread
@@ -23,7 +23,7 @@ if not FPS:
 else:
     FPS = int(FPS)
 
-faceTracker = FaceTracker(eye_n=0, jerk_threshold=0.00, max_faceless_frames=10,
+faceTracker = FaceTracker(eye_n=0, jerk_threshold=0.05, max_faceless_frames=10,
                           min_img_size=80.)
 
 faceStats = FaceStats(FPS=FPS, window=15)
