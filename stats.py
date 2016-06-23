@@ -51,12 +51,12 @@ class FaceStats:
 
 
 	def draw_signal(self, signal, plot, color=(0,0,0)):
-		x_scale = plot.shape[1] / len(signal)
+		x_scale = plot.shape[1] / float(len(signal))
 		
 		p = signal[0]
 		for ix, point in enumerate(signal):
-		    cv2.line(plot, ((ix-1)*x_scale, 235 - int(p)),
-				(ix*x_scale, 235 - int(point)),color, 1)
+		    cv2.line(plot, (int((ix-1)*x_scale), 235 - int(p)), 
+		    	(int(ix*x_scale), 235 - int(point)),color, 1)
 		    p = point
 
 	def draw_x_axis(self, x_arr, plot):
@@ -144,9 +144,9 @@ class FaceStats:
 
 		cv2.imshow("ICA best signal - frequency domain", f_plot)
 
-	def draw_raw_signal(self, width=400):
-		plot = np.ones((255, width, 3))
+	def draw_normalized_signal(self):
 		window = self.control_panel.get("window")
+		plot = np.ones((255, 800, 3))
 		r,g,b = self.normalizeRGB(self.mean_face_pixels[:window*self.FPS])
 		colors = [(255,0,0), (0,255,0), (0,0,255)]
 		for i, c in enumerate([r,g,b]):
@@ -155,7 +155,7 @@ class FaceStats:
 
 		t = np.arange(0, window, 2)
 		self.draw_x_axis(t, plot)	
-		cv2.imshow("Raw RGB signal", plot)
+		cv2.imshow("Normalized RGB signal", plot)
 
 
 	def save_face_pixels(self, path):

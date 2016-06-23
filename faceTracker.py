@@ -69,7 +69,6 @@ class FaceTracker():
         # Cut out region of interest to reduce computational time. 
         (x1, y1), (x2, y2) = self.ROI
         gray = cv2.cvtColor(self.frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-
         gray = imresize(gray, self.img_size)
 
         # Detect faces in the gray image
@@ -102,7 +101,8 @@ class FaceTracker():
                 x += x1; y += y1;
 
                 # If face size is large, we can shrink the image to speed up comp
-                self.img_size = self.control_panel.get("min_img_size") / h
+                self.img_size = self.control_panel.get("min_img_size") / float(h)
+               
                
                 # Reset faceless frame count
                 self.consec_facelss_frames = 0

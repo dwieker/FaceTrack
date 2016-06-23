@@ -10,8 +10,7 @@ from ControlPanel import ControlPanel
 t = time.time()
 face_slice = .20, .80, .0, .8
 
-vid_name = "me.mov"
-
+vid_name = "mom.mp4"
 # Initialize Video Thread
 #vs = cv2.VideoCapture(0)
 vs = cv2.VideoCapture("videos/" + vid_name)
@@ -23,9 +22,11 @@ if not FPS:
 else:
     FPS = int(FPS)
 
+
 control_panel = ControlPanel()
 faceTracker = FaceTracker(control_panel)
 faceStats = FaceStats(FPS, control_panel)
+
 
 fnum = 0
 while(True):
@@ -37,8 +38,7 @@ while(True):
    
     faceTracker.update_frame(frame)
 
-    if fnum % 3 == 0:
-        face_coords, face_found = faceTracker.locate_face()
+    face_coords, face_found = faceTracker.locate_face()
     if face_coords:
         x,y,w,h = face_coords
       
@@ -48,6 +48,7 @@ while(True):
         faceStats.update_face(face)
 
         # Draw Face rectangle!
+        frame[y+int(ts*h):y2, x+int(ls*w):x2, 1] += 20
         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255*(not face_found)), 2)
         
         # Draw circle at center of face!
@@ -58,12 +59,12 @@ while(True):
         if not np.isnan(faceStats.mean_face_pixels[:window*FPS]).any():
             faceStats.draw_face_fourier()
             faceStats.draw_ICA()
-            faceStats.draw_raw_signal()
-
+            faceStats.draw_normalized_signal()
 
     time_elapsed = time.time() - t
-    if time_elapsed < 1. / FPS:
-        time.sleep(1./FPS - time_elapsed)
+    adjusted_fps = FPS*control_panel.get("FPS_scaling")
+    if time_elapsed < (1. / adjusted_fps):
+        time.sleep(1./adjusted_fps - time_elapsed)
 
     # Draw FPS
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -73,7 +74,7 @@ while(True):
     cv2.putText(frame, "%.2f"%total_t+"s",(0,60), font, 1, (0,0,0),2)
 
 
-    # Display the resulting frame
+    # Display the frame
     display_scaling = control_panel.get("display_scaling")
     cv2.imshow('main', imresize(frame, display_scaling))  
 
