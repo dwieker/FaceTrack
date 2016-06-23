@@ -6,9 +6,10 @@ from scipy.ndimage.interpolation import shift
 
 class FaceStats:
 	
-	def __init__(self, FPS, window=15):
+	def __init__(self, FPS, control_panel, max_window=30):
+		self.control_panel = control_panel
 		self.FPS = FPS
-		self.mean_face_pixels = np.ones((window*FPS, 3)) * np.nan
+		self.mean_face_pixels = np.ones((max_window*FPS, 3)) * np.nan
 		self.face = None
 
 
@@ -45,37 +46,30 @@ class FaceStats:
 
 	def update_face(self, face):
 		self.face = face
-
-		if not np.isnan(self.mean_face_pixels[-1, 0]):
-			self.mean_face_pixels[:-1] = self.mean_face_pixels[1:]
-			index = -1
-		else:
-			index = np.where(np.isnan(self.mean_face_pixels[:,0]))[0][0]
-
-
-		self.mean_face_pixels[index] = self.rgb_mean(face)
-
+		self.mean_face_pixels[1:] = self.mean_face_pixels[:-1]
+		self.mean_face_pixels[0] = self.rgb_mean(face)
 
 
 	def draw_signal(self, signal, plot, color=(0,0,0)):
-		x_scale = plot.shape[1] / len(signal)
+		x_scale = plot.shape[1] / float(len(signal))
 		
 		p = signal[0]
 		for ix, point in enumerate(signal):
-		    cv2.line(plot, ((ix-1)*x_scale, 235 - int(p)),
-				(ix*x_scale, 235 - int(point)),color, 1)
+		    cv2.line(plot, (int((ix-1)*x_scale), 235 - int(p)), 
+		    	(int(ix*x_scale), 235 - int(point)),color, 1)
 		    p = point
 
 	def draw_x_axis(self, x_arr, plot):
 		for ix, x in enumerate(x_arr):
-			cv2.putText(plot, "%.1f"%x,(ix * plot.shape[1] / len(x_arr),250), 
+			cv2.putText(plot, "%.0f"%x,(ix * plot.shape[1] / len(x_arr),250), 
 				        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
 
 	def draw_face_fourier(self, width=400):
 		plot = np.ones((255,width,3))
 	
-		r,g,b = self.normalizeRGB(self.mean_face_pixels)
+		window = self.control_panel.get("window")
+		r,g,b = self.normalizeRGB(self.mean_face_pixels[:window*self.FPS])
 
 		freqs, I = self.fourier(g)
 
@@ -96,27 +90,28 @@ class FaceStats:
 			        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
 
-		cv2.imshow("Heart Rate", plot)
+		cv2.imshow("Raw FFT of green channel", plot)
 
 
-	def draw_ICA(self, width=400, window=15):
+	def draw_ICA(self, width=400):
 		ica = FastICA(n_components=3, max_iter=30, random_state=1)
-		r,g,b = self.normalizeRGB(self.mean_face_pixels)
-		comps = ica.fit_transform( np.array([r,g*1.5,b]).T )
+
+		window = self.control_panel.get("window")
+		r,g,b = self.normalizeRGB(self.mean_face_pixels[:window*self.FPS])
+		comps = ica.fit_transform( np.array([r,g,b]).T )
 
 		plot = np.ones((255,width,3))
 		f_plot = plot.copy()
-		colors = [(255,0,0), (0,255,0), (0,0,255)]
 
 		f_transforms = []
 		best_signal = None
 		max_peak_diff = 0
-
-		for i, comp in enumerate([comps[:,0], comps[:,1], comps[:,2]]):
+		for i in range(comps.shape[1]):
+			comp = comps[:, i]
 
 			freqs, I = self.fourier(comp)
 			I *= 215. / max(I)
-
+			
 			f_transforms.append(I)
 
 			peaks = np.where(np.r_[True, I[1:] > I[:-1]] & np.r_[I[:-1] > I[1:], True])[0]
@@ -124,17 +119,22 @@ class FaceStats:
 			peak_heights = I[peaks]
 			peak_heights.sort()
 
-			peak_diff =  (peak_heights[-1] - peak_heights[-2]) / peak_heights[-1]
+			if len(peak_heights) < 2:
+				peakB = min(I)
+			else:
+				peakB = peak_heights[-2]
+			peak_diff =  (peak_heights[-1] - peakB)
 			if peak_diff > max_peak_diff:
 				max_peak_diff = peak_diff
 				best_signal = i
 
-
+        # Annotate Bottom
+		f = np.linspace(freqs[0], freqs[-1], 6)*60
+		self.draw_x_axis(f, f_plot)
 	
 		# Mark Peak
 		f = f_transforms[best_signal]
-		x,y = (int(f.argmax() * width/len(f)), 
-			   235-int(f.max()))
+		x,y = (int(f.argmax() * width/len(f)),235-int(f.max()))
 		cv2.circle(f_plot,(x,y),5, (0,0,255), -1)
 		peak_x = freqs[f.argmax()] * 60
 		cv2.putText(f_plot, "%d"%peak_x + " BPM", (x,y-5), 
@@ -142,8 +142,20 @@ class FaceStats:
 
 		self.draw_signal(f, f_plot, (255,0,0))
 
-		cv2.imshow("ICA best frequency siganl", f_plot)
+		cv2.imshow("ICA best signal - frequency domain", f_plot)
 
+	def draw_normalized_signal(self):
+		window = self.control_panel.get("window")
+		plot = np.ones((255, 800, 3))
+		r,g,b = self.normalizeRGB(self.mean_face_pixels[:window*self.FPS])
+		colors = [(255,0,0), (0,255,0), (0,0,255)]
+		for i, c in enumerate([r,g,b]):
+			c = c*50 + 100
+			self.draw_signal(c, plot, colors[i])
+
+		t = np.arange(0, window, 2)
+		self.draw_x_axis(t, plot)	
+		cv2.imshow("Normalized RGB signal", plot)
 
 
 	def save_face_pixels(self, path):

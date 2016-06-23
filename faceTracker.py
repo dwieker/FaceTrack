@@ -9,24 +9,20 @@ class FaceTracker():
     eyeCascade = cv2.CascadeClassifier("haarcascades/haarcascade_eye.xml")
 
     def __init__(   self,
+                    control_panel,
                     ROI_padding = .2,
                     ROI_speed = .10,
-                    max_faceless_frames = 5,
-                    jerk_threshold = .03,
                     eye_n = 1, eye_scaling = 1.2,
                     face_n = 1, face_scaling = 1.1,
-                    min_img_size = 80.,
-                    img_size = 1.0):
+                    img_size = 1.0 ):
     
 
+        self.control_panel = control_panel
         self.ROI_padding = ROI_padding 
         self.ROI_speed = ROI_speed 
-        self.max_faceless_frames = max_faceless_frames 
-        self.jerk_threshold = jerk_threshold
         self.eye_n = eye_n
         self.eye_scaling = eye_scaling 
         self.face_n = face_n; self.face_scaling = face_scaling
-        self.min_img_size = min_img_size
         self.img_size = img_size
 
         self.ROI = None
@@ -44,10 +40,11 @@ class FaceTracker():
         
     def calculate_ROI_around_face(self, x,y,w,h):
         # Input parameters are a FACE. Output is an exanded ROI, accounting for frame boundaries
-        x1_new, y1_new, x2_new, y2_new =(max(0, x - int(self.ROI_padding*w)),
-                                        max(0, y - int(self.ROI_padding*h)),
-                                        min(self.frame.shape[1], x + int((1+self.ROI_padding)*w)),
-                                        min(self.frame.shape[0], y + int((1+self.ROI_padding)*h))) 
+        ROI_padding = self.ROI_padding
+        x1_new, y1_new, x2_new, y2_new =(max(0, x - int(ROI_padding*w)),
+                                        max(0, y - int(ROI_padding*h)),
+                                        min(self.frame.shape[1], x + int((1+ROI_padding)*w)),
+                                        min(self.frame.shape[0], y + int((1+ROI_padding)*h))) 
         return ((x1_new, y1_new), (x2_new, y2_new))
 
     def expand_ROI(self):
@@ -72,7 +69,6 @@ class FaceTracker():
         # Cut out region of interest to reduce computational time. 
         (x1, y1), (x2, y2) = self.ROI
         gray = cv2.cvtColor(self.frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-
         gray = imresize(gray, self.img_size)
 
         # Detect faces in the gray image
@@ -105,14 +101,16 @@ class FaceTracker():
                 x += x1; y += y1;
 
                 # If face size is large, we can shrink the image to speed up comp
-                self.img_size = self.min_img_size / h
+                self.img_size = self.control_panel.get("min_img_size") / float(h)
+               
                
                 # Reset faceless frame count
                 self.consec_facelss_frames = 0
             
                 # If there was a face last frame, just use that position again
                 # UNLESS significant movement occured
-                if (self.face and self.has_moved(self.face, (x,y,w,h), self.jerk_threshold*w)) or self.face == None:
+                jerk_threshold = self.control_panel.get("jerk_threshold")
+                if (self.face and self.has_moved(self.face, (x,y,w,h), jerk_threshold*w)) or self.face == None:
                     self.ROI = self.calculate_ROI_around_face(x,y,w,h)
                     self.face=(x,y,w,h)
                 
@@ -127,7 +125,7 @@ class FaceTracker():
 
             self.consec_facelss_frames += 1 
 
-            if self.consec_facelss_frames > self.max_faceless_frames:
+            if self.consec_facelss_frames > self.control_panel.get("max_faceless_frames"):
                 self.face = None
                 self.img_size = 1.0
 
