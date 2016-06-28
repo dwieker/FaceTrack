@@ -11,7 +11,8 @@ class ControlPanel:
                                 "min_img_size": "Face Downscaling Limit",
                                 "max_faceless_frames": "Dropped frames limit",
                                 "window": "Time Window (s)",
-                                "FPS_scaling": "Video Play Speed (%)"
+                                "FPS_scaling": "Video Play Speed (%)",
+                                "eye_n": "Eye Detection Strictness"
                             }
 
 
@@ -22,9 +23,10 @@ class ControlPanel:
         cv2.createTrackbar("Dropped Frames Limit", "panel", 8, 20, lambda x: 0)
         cv2.createTrackbar("Time Window (s)", "panel", 15, 30, lambda x: 0)
         cv2.createTrackbar("Video Play Speed (%)", "panel", 100, 200, lambda x: 0)
+        cv2.createTrackbar("Eye Detection Strictness", "panel", 1, 4, lambda x: 0)
 
 
-        cv2.imshow("panel", np.ones((1,400)))
+        cv2.imshow("panel", np.zeros((1,400)))
 
     def get(self, setting):
         name = self.display_names[setting]

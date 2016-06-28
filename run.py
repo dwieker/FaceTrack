@@ -10,23 +10,20 @@ from ControlPanel import ControlPanel
 t = time.time()
 face_slice = .20, .80, .0, .8
 
-vid_name = "mom.mp4"
-# Initialize Video Thread
-#vs = cv2.VideoCapture(0)
+vid_name = "people.mp4"
 vs = cv2.VideoCapture("videos/" + vid_name)
 
 FPS = vs.get(cv2.cv.CV_CAP_PROP_FPS)
 if not FPS:
     print "Unknown FPS!"
+    vs.release()
     sys.exit()
-else:
-    FPS = int(FPS)
+FPS = int(FPS)
 
 
 control_panel = ControlPanel()
 faceTracker = FaceTracker(control_panel)
 faceStats = FaceStats(FPS, control_panel)
-
 
 fnum = 0
 while(True):
@@ -48,18 +45,16 @@ while(True):
         faceStats.update_face(face)
 
         # Draw Face rectangle!
-        frame[y+int(ts*h):y2, x+int(ls*w):x2, 1] += 20
         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 255*(not face_found)), 2)
         
         # Draw circle at center of face!
         midx = (x + w + x)/2; midy = (y+h+y)/2
         cv2.circle(frame, (midx,midy), 3, color=(0,0,0), thickness=-1) 
 
-        window = control_panel.get("window")
-        if not np.isnan(faceStats.mean_face_pixels[:window*FPS]).any():
-            faceStats.draw_face_fourier()
-            faceStats.draw_ICA()
-            faceStats.draw_normalized_signal()
+        # window = control_panel.get("window")
+        # if not np.isnan(faceStats.mean_face_pixels[:window*FPS]).any():
+        #     faceStats.draw_ICA()
+        #     faceStats.draw_normalized_signal()
 
     time_elapsed = time.time() - t
     adjusted_fps = FPS*control_panel.get("FPS_scaling")
@@ -85,7 +80,8 @@ while(True):
         break
 
 
-faceStats.save_face_pixels("data/" + vid_name.split(".")[0] + ".txt")  
-cv2.destroyAllWindows()
+#faceStats.save_face_pixels("data/" + vid_name.split(".")[0] + ".txt")  
 vs.release()
+cv2.destroyAllWindows()
+
 

@@ -55,13 +55,13 @@ class FaceStats:
 		
 		p = signal[0]
 		for ix, point in enumerate(signal):
-		    cv2.line(plot, (int((ix-1)*x_scale), 235 - int(p)), 
-		    	(int(ix*x_scale), 235 - int(point)),color, 1)
+		    cv2.line(plot, (int((ix-1)*x_scale), int(plot.shape[0]*.9) - int(p)), 
+		    	(int(ix*x_scale), int(plot.shape[0]*.9) - int(point)),color, 1)
 		    p = point
 
 	def draw_x_axis(self, x_arr, plot):
 		for ix, x in enumerate(x_arr):
-			cv2.putText(plot, "%.0f"%x,(ix * plot.shape[1] / len(x_arr),250), 
+			cv2.putText(plot, "%.0f"%x,(ix * plot.shape[1] / len(x_arr), int(plot.shape[0]*.97)), 
 				        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
 
@@ -93,6 +93,35 @@ class FaceStats:
 		cv2.imshow("Raw FFT of green channel", plot)
 
 
+	def best_signal(self, signals):
+		max_ratio = 0
+		best_signal = None
+		for signal in signals:
+			peaks = np.where(np.r_[True, signal[1:] > signal[:-1]] & 
+					             np.r_[signal[:-1] > signal[1:], True])[0]
+
+			# Drop first and last point
+			peaks = peaks[(peaks != 0) & (peaks != len(signal) - 1)]
+
+			peak_heights = signal[peaks]
+			peak_heights.sort()
+
+
+			if len(peak_heights) == 0:
+				continue
+
+			if len(peak_heights) == 1:
+				return signal
+
+			ratio = peak_heights[-1] / float(peak_heights[-2])
+			if ratio > max_ratio:
+				max_ratio = ratio
+				best_signal = signal
+
+
+		return best_signal
+
+
 	def draw_ICA(self, width=400):
 		ica = FastICA(n_components=3, max_iter=30, random_state=1)
 
@@ -110,37 +139,24 @@ class FaceStats:
 			comp = comps[:, i]
 
 			freqs, I = self.fourier(comp)
-			I *= 215. / max(I)
 			
 			f_transforms.append(I)
 
-			peaks = np.where(np.r_[True, I[1:] > I[:-1]] & np.r_[I[:-1] > I[1:], True])[0]
-		   
-			peak_heights = I[peaks]
-			peak_heights.sort()
 
-			if len(peak_heights) < 2:
-				peakB = min(I)
-			else:
-				peakB = peak_heights[-2]
-			peak_diff =  (peak_heights[-1] - peakB)
-			if peak_diff > max_peak_diff:
-				max_peak_diff = peak_diff
-				best_signal = i
-
+		I = self.best_signal(f_transforms)
+			
         # Annotate Bottom
 		f = np.linspace(freqs[0], freqs[-1], 6)*60
 		self.draw_x_axis(f, f_plot)
 	
-		# Mark Peak
-		f = f_transforms[best_signal]
-		x,y = (int(f.argmax() * width/len(f)),235-int(f.max()))
+		I =  I * 215 / I.max()
+		x,y = (int(I.argmax() * width/len(I)),235-int(I.max()))
 		cv2.circle(f_plot,(x,y),5, (0,0,255), -1)
-		peak_x = freqs[f.argmax()] * 60
+		peak_x = freqs[I.argmax()] * 60
 		cv2.putText(f_plot, "%d"%peak_x + " BPM", (x,y-5), 
 			        cv2.FONT_HERSHEY_SIMPLEX, .5, (0,0,0),1)
 
-		self.draw_signal(f, f_plot, (255,0,0))
+		self.draw_signal(I, f_plot, (255,0,0))
 
 		cv2.imshow("ICA best signal - frequency domain", f_plot)
 

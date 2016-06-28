@@ -12,7 +12,7 @@ class FaceTracker():
                     control_panel,
                     ROI_padding = .2,
                     ROI_speed = .10,
-                    eye_n = 1, eye_scaling = 1.2,
+                    eye_n = 1, eye_scaling = 1.1,
                     face_n = 1, face_scaling = 1.1,
                     img_size = 1.0 ):
     
@@ -89,7 +89,7 @@ class FaceTracker():
             eyes = FaceTracker.eyeCascade.detectMultiScale(
                 gray[y:y+h, x:x+w],
                 scaleFactor=self.eye_scaling,
-                minNeighbors=self.eye_n,
+                minNeighbors=self.control_panel.get("eye_n"),
                 minSize=(int(w*.1), int(h*.1)), #Eyes should not be tiny compared to face
             )
             
@@ -129,11 +129,9 @@ class FaceTracker():
                 self.face = None
                 self.img_size = 1.0
 
-        if self.face:
-            return self.face, face_found
-        else:
-            return None, False
-
+        
+        return self.face, face_found
+      
 
 
 
